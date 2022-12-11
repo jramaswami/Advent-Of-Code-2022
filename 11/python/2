@@ -1,0 +1,116 @@
+"""
+Advent of Code 2022
+Day 11: Monkey in the Middle
+jramaswami
+"""
+
+from dataclasses import dataclass
+from typing import *
+import collections
+import functools
+import operator
+import os
+
+
+@dataclass
+class Monkey:
+    "Class representing a monkey."
+    items: Deque[int]
+    operation: Callable
+    test: Callable
+    truemonkey: int
+    falsemonkey: int
+
+
+def parse_input(filename):
+    operations = {
+        '*': operator.mul,
+        '+': operator.add,
+        'square': lambda x: x * x
+    }
+    monkeys = []
+    with open(filename) as infile:
+        while infile:
+            # Read lines describing a single monkey.
+            lines = [infile.readline().strip() for _ in range(7)]
+            if not lines[0]:
+                break
+            # Parse the starting items.
+            header, data = lines[1].split(':')
+            items = collections.deque(int(i) for i in data.split(','))
+            # Parse the operation performed.
+            tokens = lines[2].split()
+            operation = None
+            if tokens[-3] == 'old' and tokens[-2] == '*' and tokens[-1] == 'old':
+                operation = operations['square']
+            else:
+                operation = functools.partial(operations[tokens[-2]], int(tokens[-1]))
+            # Parse test.
+            tokens = lines[3].split()
+            test = functools.partial(lambda y, x: x % y, int(tokens[-1]))
+            # Parse true/false monkeys.
+            truemonkey = int(lines[4].split()[-1])
+            falsemonkey = int(lines[5].split()[-1])
+
+            monkeys.append(Monkey(items, operation, test, truemonkey, falsemonkey))
+
+    return monkeys
+
+
+def tick(monkeys, verbose=False):
+    for i, monkey in enumerate(monkeys):
+        if verbose:
+            print(f"Monkey {i}:")
+        while monkey.items:
+            item = monkey.items.popleft()
+            if verbose:
+                print(f"Worry level starts at {item}")
+            item = monkey.operation(item)
+            if verbose:
+                print(f"Worry level goes to {item}")
+            item //= 3
+            if verbose:
+                print(f"Worry level reduced to {item}")
+            if monkey.test(item) == 0:
+                if verbose:
+                    print(f"{item} thrown to monkey {monkey.truemonkey}")
+                monkeys[monkey.truemonkey].items.append(item)
+            else:
+                if verbose:
+                    print(f"{item} thrown to monkey {monkey.falsemonkey}")
+                monkeys[monkey.falsemonkey].items.append(item)
+
+
+def parse_expected_tick(filename):
+    "Parse the expected items for each monkey for the given tick file."
+    monkey_items = []
+    with open(filename) as infile:
+        for line in infile:
+            head, data = line.split(':')
+            if data.strip():
+                monkey_items.append(
+                    collections.deque([int(i) for i in data.strip().split(',')])
+                )
+            else:
+                monkey_items.append(collections.deque([]))
+    return monkey_items
+
+
+def test_1():
+    pass
+
+
+def main():
+    "Main program."
+    # monkeys = parse_input('../test.txt')
+    # print(monkeys)
+    # tick(monkeys)
+    for i in range(21):
+        filename = f"../tick{i}.txt"
+        if os.path.exists(filename):
+            print(i, parse_expected_tick(filename))
+
+
+if __name__ == '__main__':
+    main()
+

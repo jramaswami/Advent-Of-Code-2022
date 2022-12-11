@@ -1,0 +1,4 @@
+Monkey 0: 491, 9, 52, 97, 248, 34
+Monkey 1: 39, 45, 43, 258
+Monkey 2:
+Monkey 3:
