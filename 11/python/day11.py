@@ -2,9 +2,9 @@
 Advent of Code 2022
 Day 11: Monkey in the Middle
 jramaswami
-"""
 
-# 14396160252 is too low
+I had to get a hint to solve part B.
+"""
 
 from dataclasses import dataclass
 from typing import *
@@ -12,7 +12,6 @@ import collections
 import functools
 import operator
 import os
-import tqdm
 
 
 @dataclass
@@ -23,6 +22,7 @@ class Monkey:
     test: Callable
     truemonkey: int
     falsemonkey: int
+    divisor: int
     inspected: int = 0
 
 
@@ -52,18 +52,20 @@ def parse_input(filename):
                 operation = functools.partial(operations[tokens[-2]], int(tokens[-1]))
             # Parse test.
             tokens = lines[3].split()
+            divisor = int(tokens[-1])
             test = functools.partial(lambda y, x: x % y, int(tokens[-1]))
             # Parse true/false monkeys.
             truemonkey = int(lines[4].split()[-1])
             falsemonkey = int(lines[5].split()[-1])
 
-            monkeys.append(Monkey(items, operation, test, truemonkey, falsemonkey))
+            monkeys.append(Monkey(items, operation, test, truemonkey, falsemonkey, divisor))
 
     return monkeys
 
 
 def tick(monkeys, reduceworry=True, verbose=False):
     "Simulate one tick."
+    MOD = functools.reduce(operator.mul, (m.divisor for m in monkeys), 1)
     for i, monkey in enumerate(monkeys):
         if verbose:
             print(f"Monkey {i}:")
@@ -82,16 +84,16 @@ def tick(monkeys, reduceworry=True, verbose=False):
             if monkey.test(item) == 0:
                 if verbose:
                     print(f"{item} thrown to monkey {monkey.truemonkey}")
-                monkeys[monkey.truemonkey].items.append(item)
+                monkeys[monkey.truemonkey].items.append(item % MOD)
             else:
                 if verbose:
                     print(f"{item} thrown to monkey {monkey.falsemonkey}")
-                monkeys[monkey.falsemonkey].items.append(item)
+                monkeys[monkey.falsemonkey].items.append(item % MOD)
 
 
 def simulate(monkeys, ticks, reduceworry=True):
     "Simulate for the given number of ticks."
-    for _ in tqdm.tqdm(range(ticks)):
+    for _ in range(ticks):
         tick(monkeys, reduceworry=reduceworry)
 
 
@@ -172,8 +174,8 @@ def main():
     print(f"The solution to part A is {soln_a}.")
 
     monkeys = parse_input('../input11.txt')
-    # monkeys = parse_input('../test.txt')
     soln_b = solve_b(monkeys)
+    assert soln_b == 14399640002
     print(f"The solution to part B is {soln_b}.")
     pyperclip.copy(str(soln_b))
     print(f"{soln_b} has been placed in the clipboard.")
