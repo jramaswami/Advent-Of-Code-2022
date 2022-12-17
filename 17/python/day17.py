@@ -15,6 +15,7 @@ ROCKS = tuple([
 
 
 def read_input(filename):
+    "Read jets from input file."
     with open(filename) as infile:
         jets = infile.readline().strip()
     return jets
@@ -22,21 +23,26 @@ def read_input(filename):
 
 class Simulator:
 
-    def __init__(self, jets):
+    def __init__(self, jets, limit=2022, cycle_detection=False):
         self.jets = jets
         self.tower_height = -1
         self.rock_tower = set()
-        self.clock = 0
         self.rock_index = 0
+        self.jet_index = 0
         self.falling_rock = None
 
         self.left_wall = 0
         self.right_wall = 7
 
+        self.limit = limit
+
+        self.cycle_detection = cycle_detection
+        self.xs = []
+        self.prev_cycles = dict()
+        self.cycle_detected = False
+        self.offset = 0
+
         self.launch_rock()
-
-        self.jet_index = 0
-
 
     def lateral_collision(self, falling_rock):
         "Return True if falling_rock collides with anything, laterally."
@@ -59,8 +65,6 @@ class Simulator:
     def launch_rock(self):
         "Begin a new rock falling."
         # Pick next rock
-        # print(f"Launching rock {self.rock_index} ...")
-        # print(f"Current height {self.tower_height} ...")
         falling_rock0 = ROCKS[self.rock_index % len(ROCKS)]
         self.rock_index += 1
         # Move rock into position.
@@ -74,9 +78,31 @@ class Simulator:
             self.rock_tower.add((x, y))
             self.tower_height = max(self.tower_height, y)
 
+        # Cycle detection
+        if self.cycle_detection == True:
+            if not self.cycle_detected:
+                self.xs.append(self.falling_rock[0][0])
+                if self.rock_index % len(ROCKS) == 0 and self.rock_index >= len(ROCKS) * 2:
+                    i = self.rock_index - (len(ROCKS) * 2)
+                    j = self.rock_index - len(ROCKS)
+                    curr_cycle = (tuple(self.xs), self.jet_index % len(self.jets))
+                    self.xs = []
+                    if curr_cycle in self.prev_cycles:
+                        self.cycle_detected = True
+                        curr_rock, curr_height = self.rock_index, self.tower_height
+                        prev_rock, prev_height = self.prev_cycles[curr_cycle]
+                        delta_rock = curr_rock - prev_rock
+                        delta_height = curr_height - prev_height
+
+                        remaining_rocks = self.limit - curr_rock
+                        cycles_added = remaining_rocks // delta_rock
+                        self.rock_index += (delta_rock * cycles_added)
+                        self.offset += (delta_height * cycles_added)
+
+                    self.prev_cycles[curr_cycle] = (self.rock_index, self.tower_height)
+
     def tick(self):
         "Simulate a single unit of time."
-        self.clock += 1
 
         # Rocks alternate between being pushed by jet and then falling down one
         # unit.
@@ -92,7 +118,6 @@ class Simulator:
         falling_rock0 = tuple((x+dx, y) for x, y in self.falling_rock)
         if not self.lateral_collision(falling_rock0):
             self.falling_rock = falling_rock0
-            # print('rock moved', jet)
 
         # See if rock can fall.
         falling_rock0 = tuple((x, y-1) for x, y in self.falling_rock)
@@ -100,8 +125,15 @@ class Simulator:
             self.settle_rock()
             self.launch_rock()
         else:
-            # print('rock moved v')
             self.falling_rock = falling_rock0
+
+    def solve(self):
+        "Solve puzzle."
+        prev_rock_index = 0
+        while self.rock_index <= self.limit:
+            self.tick()
+            prev_rock_index = self.rock_index
+        return self.tower_height + self.offset + 1
 
     def __str__(self):
         lines = []
@@ -124,18 +156,29 @@ class Simulator:
         return "\n".join(lines)
 
 
-def solve_a(jets, limit=2022):
-    "Solve part A of puzzle."
-    simulator = Simulator(jets)
-    while simulator.rock_index <= limit:
-        simulator.tick()
-    return simulator.tower_height + 1
-
-
 def test_solve_a():
     jets = read_input('../test.txt')
+    simulator = Simulator(jets)
     expected = 3068
-    result = solve_a(jets)
+    result = simulator.solve()
+    assert result == expected
+
+
+def test_cycle_detection():
+    jets = read_input('../test.txt')
+    for limit in range(10000, 100000, 1000001 ):
+        simulator = Simulator(jets, limit)
+        soln_x = simulator.solve()
+        simulator0 = Simulator(jets, limit, True)
+        soln_y = simulator.solve()
+        assert soln_x == soln_y
+
+
+def test_solve_b():
+    jets = read_input('../test.txt')
+    simulator = Simulator(jets, 1000000000000, cycle_detection=True)
+    expected = 1514285714288
+    result = simulator.solve()
     assert result == expected
 
 
@@ -148,11 +191,17 @@ def main():
     "Main program."
     import pyperclip
     jets = read_input('../input17.txt')
-    soln_a = solve_a(jets)
+    simulator_a = Simulator(jets)
+    soln_a = simulator_a.solve()
     print(f"The solution to part A is {soln_a}.")
     assert soln_a == 3071
-    pyperclip.copy(str(soln_a))
-    print(f"{soln_a} has been placed in the clipboard.")
+    simulator_b = Simulator(jets, limit=1000000000000, cycle_detection=True)
+    soln_b = simulator_b.solve()
+    print(f"The solution to part B is {soln_b}.")
+    assert soln_b == 1523615160362
+    pyperclip.copy(str(soln_b))
+    print(f"{soln_b} has been placed in the clipboard.")
+
 
 if __name__ == '__main__':
     main()
