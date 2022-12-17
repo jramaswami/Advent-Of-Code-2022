@@ -8,12 +8,13 @@ jramaswami
 import collections
 import itertools
 import math
+import os
 import tqdm
 
 
 State = collections.namedtuple(
     'State',
-    ['valve', 'flow', 'acc', 'time', 'closedvalves', 'id']
+    ['valve', 'flow', 'acc', 'time', 'key']
 )
 
 def parse_input(filename):
@@ -53,61 +54,39 @@ def floyd_warshall(valve_graph):
     return dist
 
 
-def add_to_path(path, valve, flow, start):
-    "Add a given flow event to the path."
-    path0 = list(path)
-    path0.append((valve, flow, start))
-    return tuple(path0)
-
-
-def trackback(parents, start):
-    "Track back to reconstruct path."
-    stack = [start]
-    while stack[-1] >= 0:
-        stack.append(parents[stack[-1]])
-    return stack[::-1]
-
-
-def solve_a(valve_flows, valve_graph):
+def solve_a(valve_flows, valve_graph, time_limit=30):
     "Solve part A of puzzle."
+
     dist = floyd_warshall(valve_graph)
+
     soln_a = 0
-    init_state = State('AA', 0, 0, 0, frozenset(valve_flows), -1)
+    init_state = State('AA', 0, 0, 0, 0)
     queue = collections.deque()
     queue.append(init_state)
 
-    parents = dict()
-    all_states = dict()
-    all_states[-1] = init_state
-
     while queue:
         state = queue.popleft()
-        total_flow = state.acc + ((30 - state.time) * state.flow)
+        total_flow = state.acc + ((time_limit - state.time) * state.flow)
         if total_flow > soln_a:
             soln_a = total_flow
-            soln_end = state.id
 
-        for neighbor in state.closedvalves:
+        for i, neighbor in enumerate(valve_flows):
+            key0 = state.key | (1 << i)
+            if key0 == state.key:
+                continue
+
             time_to_open = dist[state.valve][neighbor] + 1
-            if state.time + time_to_open <= 30:
+            if state.time + time_to_open <= time_limit:
                 state0 = State(
                     neighbor,
                     state.flow + valve_flows[neighbor],
                     state.acc + (time_to_open * state.flow),
                     state.time + time_to_open,
-                    state.closedvalves - frozenset([neighbor]),
-                    len(parents)
+                    key0
                 )
-                parents[state0.id] = state.id
-                all_states[state0.id] = state0
                 queue.append(state0)
 
-    path = []
-    for i in trackback(parents, soln_end):
-        s = all_states[i]
-        path.append((s.time, s.valve))
-
-    return soln_a, path
+    return soln_a
 
 
 # From Python docs.
@@ -117,42 +96,47 @@ def powerset(iterable):
     return itertools.chain.from_iterable(itertools.combinations(s, r) for r in range(len(s)+1))
 
 
-def solve_b(valve_flows, valve_graph):
+def solve_b(valve_flows, valve_graph, use_cache=True):
     "Solve part B of puzzle."
     # Takes less than a second to do the entire set.
     # I do some, elephant does the rest.
     # Only 2^N items in a powerset.
-    # Compute best flow *and* path/time for each set of valves.
+    # Compute best flow for each set of valves.
     # Maximize (my best with set nodes) + (elephants best with rest of nodes)
 
-    soln_b = solve_a(valve_flows, valve_graph)[0]
-    P = list(powerset(valve_flows))
-    for me in tqdm.tqdm(P):
-        if not me:
-            continue
-        me0 = frozenset(me)
-        my_valves = {v: f for v, f in valve_flows.items() if v in me0}
-        el_valves = {v: f for v, f in valve_flows.items() if v not in me0}
-        if not el_valves:
-            continue
-        _, my_path = solve_a(my_valves, valve_graph)
-        _, el_path = solve_a(el_valves, valve_graph)
+    def compute_key(vs):
+        key = 0
+        for i, u in enumerate(valve_flows):
+            mask = (1 << i)
+            if u in vs:
+                key |= mask
+        return key
 
-        events = list(my_path)
-        events.extend(el_path)
-        events.sort()
-        curr_flow = 0
-        curr_time = 0
-        total_flow = 0
-        for event_time, valve_opened in events:
-            if valve_opened != 'AA':
-                delta = event_time - curr_time
-                total_flow += (curr_flow * delta)
-                curr_flow += valve_flows[valve_opened]
-                curr_time = event_time
-        delta = 26 - event_time
-        total_flow += (curr_flow * delta)
-        soln_b = max(soln_b, total_flow)
+    if use_cache and os.path.exists('cache_file.txt'):
+        print('Reading cached flows for each set of valves ...')
+        with open('cache_file.txt') as infile:
+            scores = [int(line.strip()) for line in infile]
+    else:
+        P = [tuple(sorted(p)) for p in powerset(valve_flows)]
+        scores = [0 for _ in P]
+
+        print(f"There are {len(P)} kinds to check.")
+        print("It takes approximately 15 minutes to check them.")
+        for me in tqdm.tqdm(P):
+            my_valves = {v: f for v, f in valve_flows.items() if v in me}
+            my_key = compute_key(my_valves)
+            my_flow = solve_a(my_valves, valve_graph, 26)
+            scores[my_key] = my_flow
+
+        if use_cache:
+            print('Caching flow results ...')
+            with open('cache_file.txt', 'w') as outfile:
+                for score in scores:
+                    print(score, file=outfile)
+
+    soln_b = 0
+    for key, _ in enumerate(scores):
+        soln_b = max(soln_b, (scores[key] + scores[~key]))
     return soln_b
 
 
@@ -165,12 +149,13 @@ def test_solve_a():
     valve_flows, valve_graph = parse_input('../test.txt')
     expected = 1651
     result = solve_a(valve_flows, valve_graph)
+    assert result == expected
 
 
 def test_solve_b():
     valve_flows, valve_graph = parse_input('../test.txt')
     expected = 1707
-    result = solve_b(valve_flows, valve_graph)
+    result = solve_b(valve_flows, valve_graph, use_cache=False)
     assert result == expected
 
 
@@ -184,11 +169,12 @@ def main():
     import pyperclip
     # valve_flows, valve_graph = parse_input('../test.txt')
     valve_flows, valve_graph = parse_input('../input16.txt')
-    soln_a, soln_path = solve_a(valve_flows, valve_graph)
+    soln_a = solve_a(valve_flows, valve_graph)
     assert soln_a == 1940
     print(f"The solution to part A is {soln_a}.")
     soln_b = solve_b(valve_flows, valve_graph)
     print(f"The solution to part B is {soln_b}.")
+    assert soln_b == 2469
     pyperclip.copy(str(soln_b))
     print(f"{soln_b} has been placed on the clipboard.")
 
