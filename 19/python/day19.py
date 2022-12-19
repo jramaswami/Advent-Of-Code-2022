@@ -7,6 +7,7 @@ jramaswami
 
 import collections
 import functools
+import heapq
 
 
 ROBOT_NAMES = ['ore', 'clay', 'obsidian', 'geode']
@@ -77,38 +78,39 @@ def mine_resources(robots, resources):
 
 
 def simulate(blueprint):
-
-    @functools.cache
-    def rec(i, robots, resources):
-        # Base Case.
-        if i >= 24:
-            return resources
-
-        # Collect resources
-        resources = mine_resources(robots, resources)
-
-        result = resources
-        for robot in ROBOT_NAMES:
-            dont_buy = rec(i+1, robots, resources)
-            if dont_buy.geode > result.geode:
-                result = dont_buy
-            if can_buy(robot, resources, blueprint):
-                robots0, resources0 = buy_robot(robot, robots, resources, blueprint)
-                buy = rec(i+1, robots0, resources0)
-                if buy.geode > result.geode:
-                    result = buy
-        return result
-
     init_robots = Robots(1, 0, 0 ,0)
     init_resources = Resources(0, 0, 0, 0)
-    return rec(0, init_robots, init_resources)
+    queue = set([(init_robots, init_resources)])
+    new_queue = set()
+    curr_max_geodes = 0
+    for t in range(24):
+        print(t, len(queue), curr_max_geodes)
+        for robots, resources in queue:
+            print(robots, resources)
+            # print(robots, resources)
+            # Do not buy.
+            resources1 = mine_resources(robots, resources)
+            new_queue.add((robots, resources1))
+
+            # Buy a robot.
+            for robot in ROBOT_NAMES:
+                resources0 = resources
+                if can_buy(robot, resources0, blueprint):
+                    robots0, resources0 = buy_robot(
+                        robot, robots, resources0, blueprint
+                    )
+                    resources1 = mine_resources(robots, resources0)
+                    new_queue.add((robots0, resources1))
+        curr_max_geodes = max(r.geode for _, r in new_queue)
+        queue, new_queue = new_queue, set()
+
+    return max(resources.geode for _, resources in queue)
+
+
 
 
 def solve_a(blueprints):
-    for blueprint in blueprints:
-        print('Simulating', blueprint, '...')
-        result = simulate(blueprint)
-        print(blueprint, result)
+    result = simulate(blueprints[0])
 
 #
 # Main
