@@ -5,112 +5,121 @@ jramaswami
 """
 
 
-import collections
 import functools
-import heapq
 
 
-ROBOT_NAMES = ['ore', 'clay', 'obsidian', 'geode']
+ORE_ROBOTS = 0
+CLAY_ROBOTS = 1
+OBSIDIAN_ROBOTS = 2
+GEODE_ROBOTS = 3
+ORE_UNITS = 4
+CLAY_UNITS = 5
+OBSIDIAN_UNITS = 6
+GEODE_UNITS = 7
 
+ORE_ROBOT_ORE_COST = 0
+CLAY_ROBOT_ORE_COST = 1
+OBSIDIAN_ROBOT_ORE_COST = 2
+OBSIDIAN_ROBOT_CLAY_COST = 3
+GEODE_ROBOT_CLAY_COST = 4
+GEODE_ROBOT_OBSIDIAN_COST = 5
 
-Resources = collections.namedtuple(
-    'Resources',
-    ['ore', 'clay', 'obsidian', 'geode']
-)
-
-
-Recipes = collections.namedtuple(
-    'Recipes',
-    ['ore', 'clay', 'obsidian', 'geode']
-)
-
-
-Robots = collections.namedtuple(
-    'Robots',
-    ['ore', 'clay', 'obsidian', 'geode']
-)
 
 
 def read_input(filename):
-    "Read and parse input."
     blueprints = []
     with open(filename) as infile:
         for line in infile:
-            tokens = [int(t) for t in line.split() if t.isnumeric()]
-            assert len(tokens) == 6
-            ore_robot = Resources(tokens[0], 0, 0, 0)
-            clay_robot = Resources(tokens[1], 0, 0, 0)
-            obsidian_robot = Resources(tokens[2], tokens[3], 0, 0)
-            geode_robot = Resources(tokens[4], tokens[5], 0, 0)
+            line = line.strip()
+            i = line.find(': ')
             blueprints.append(
-                Recipes(ore_robot, clay_robot, obsidian_robot, geode_robot)
+                tuple([int(t) for t in line[i+1:].split() if t.isnumeric()])
             )
     return blueprints
 
 
-def can_buy(robot, resources, blueprint):
-    recipe = getattr(blueprint, robot)
-    for i, _ in enumerate(recipe):
-        if resources[i] < recipe[i]:
-            return False
-    return True
+def max_geodes(blueprint):
+    # state = (
+    #   ore robots, clay robots, obsidian robots, geode robots,
+    #   ore units, clay units, obsidian units, geode units
+    # )
 
+    @functools.cache
+    def rec(timer, state):
+        # Base case.
+        if timer >= 24:
+            return state[GEODE_UNITS]
 
-def buy_robot(robot, robots, resources, blueprint):
-    recipe = getattr(blueprint, robot)
-    resources0 = []
-    robots0 = []
-    for i, _ in enumerate(recipe):
-        resources0.append(resources[i] - recipe[i])
-        robots0.append(robots[i])
-        if ROBOT_NAMES[i] == robot:
-            robots0[i] += 1
-    return Robots(*robots0), Resources(*resources0)
+        # Don't buy anything
+        state0 = list(state)
+        for i, robot in enumerate(state0[:ORE_UNITS]):
+            state0[i+4] += state0[i]
+        state0 = tuple(state0)
+        result = rec(timer+1, state0)
 
+        # Buy ore robot?
+        if state[ORE_UNITS] >= blueprint[ORE_ROBOT_ORE_COST]:
+            state0 = list(state)
+            # Buy robot.
+            state0[ORE_UNITS] -= blueprint[ORE_ROBOT_ORE_COST]
+            # Mine resources.
+            for i, robot in enumerate(state0[:4]):
+                state0[i+4] += state0[i]
+            # Deliver robot.
+            state0[ORE_ROBOTS] += 1
+            state0 = tuple(state0)
+            result = max(result, rec(timer+1, state0))
 
-def mine_resources(robots, resources):
-    resources0 = []
-    for robot in ROBOT_NAMES:
-        resources0.append(
-            getattr(resources, robot) + getattr(robots, robot)
-        )
-    return Resources(*resources0)
+        # Buy clay robot?
+        if state[ORE_UNITS] >= blueprint[CLAY_ROBOT_ORE_COST]:
+            state0 = list(state)
+            # Buy robot.
+            state0[ORE_UNITS] -= blueprint[CLAY_ROBOT_ORE_COST]
+            # Mine resources.
+            for i, robot in enumerate(state0[:4]):
+                state0[i+4] += state0[i]
+            # Deliver robot.
+            state0[CLAY_ROBOTS] += 1
+            state0 = tuple(state0)
+            result = max(result, rec(timer+1, state0))
 
+        # Buy obsidian robot?
+        if (state[ORE_UNITS] >= blueprint[OBSIDIAN_ROBOT_ORE_COST]
+        and state[CLAY_UNITS] >= blueprint[OBSIDIAN_ROBOT_CLAY_COST]):
+            state0 = list(state)
+            # Buy robot.
+            state0[ORE_UNITS] -= blueprint[OBSIDIAN_ROBOT_ORE_COST]
+            state0[CLAY_UNITS] -= blueprint[OBSIDIAN_ROBOT_CLAY_COST]
+            # Mine resources.
+            for i, robot in enumerate(state0[:4]):
+                state0[i+4] += state0[i]
+            # Deliver robot.
+            state0[OBSIDIAN_ROBOTS] += 1
+            state0 = tuple(state0)
+            result = max(result, rec(timer+1, state0))
 
-def simulate(blueprint):
-    init_robots = Robots(1, 0, 0 ,0)
-    init_resources = Resources(0, 0, 0, 0)
-    queue = set([(init_robots, init_resources)])
-    new_queue = set()
-    curr_max_geodes = 0
-    for t in range(24):
-        print(t, len(queue), curr_max_geodes)
-        for robots, resources in queue:
-            print(robots, resources)
-            # print(robots, resources)
-            # Do not buy.
-            resources1 = mine_resources(robots, resources)
-            new_queue.add((robots, resources1))
+        # Buy geode robot?
+        if (state[CLAY_UNITS] >= blueprint[GEODE_ROBOT_CLAY_COST]
+        and state[OBSIDIAN_UNITS] >= blueprint[GEODE_ROBOT_OBSIDIAN_COST]):
+            state0 = list(state)
+            # Buy robot.
+            state0[CLAY_UNITS] -= blueprint[GEODE_ROBOT_CLAY_COST]
+            state0[OBSIDIAN_UNITS] -= blueprint[GEODE_ROBOT_OBSIDIAN_COST]
+            # Mine resources.
+            for i, robot in enumerate(state0[:4]):
+                state0[i+4] += state0[i]
+            # Deliver robot.
+            state0[GEODE_ROBOTS] += 1
+            state0 = tuple(state0)
+            result = max(result, rec(timer+1, state0))
+        return result
 
-            # Buy a robot.
-            for robot in ROBOT_NAMES:
-                resources0 = resources
-                if can_buy(robot, resources0, blueprint):
-                    robots0, resources0 = buy_robot(
-                        robot, robots, resources0, blueprint
-                    )
-                    resources1 = mine_resources(robots, resources0)
-                    new_queue.add((robots0, resources1))
-        curr_max_geodes = max(r.geode for _, r in new_queue)
-        queue, new_queue = new_queue, set()
-
-    return max(resources.geode for _, resources in queue)
-
-
-
+    init_state = tuple([1, 0, 0, 0, 0, 0, 0, 0])
+    return rec(0, init_state)
 
 def solve_a(blueprints):
-    result = simulate(blueprints[0])
+    print(max_geodes(blueprints[0]))
+
 
 #
 # Main
@@ -120,9 +129,8 @@ def solve_a(blueprints):
 def main():
     "Main program."
     import pyperclip
-    blueprints = read_input('../test.txt')
-    soln_a = solve_a(blueprints)
-    print("The solution to part A is {soln_a}.")
+    recipes = read_input('../test.txt')
+    soln_a = solve_a(recipes)
 
 
 if __name__ == '__main__':
