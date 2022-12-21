@@ -4,9 +4,9 @@ Day 21: Monkey Math
 jramaswami
 """
 
-# 152 is too low.
 
 import operator
+import math
 
 
 class Node:
@@ -21,11 +21,11 @@ class Node:
         return self.left is None and self.right is None
 
     def get_value(self):
-        if not self.is_leaf() and self.value is None:
-            self.value = self.operation(
-                self.left.get_value(), self.right.get_value()
-            )
-        return self.value
+        if self.is_leaf():
+            return self.value
+        x = self.left.get_value()
+        y = self.right.get_value()
+        return self.operation(x, y)
 
     def __repr__(self):
         return f"Node({self.name})"
@@ -65,7 +65,65 @@ def read_input(filename):
 
 
 def solve_a(root):
+    "Solve part A of puzzle."
     return root.get_value()
+
+
+def set_humn(node, value):
+    "Set the value of the 'humn' node."
+    if node is None:
+        return
+
+    if node.name == 'humn':
+        node.value = value
+    else:
+        set_humn(node.left, value)
+        set_humn(node.right, value)
+
+
+def solve_b(root):
+    "Solve part B of puzzle. Binary search for the answer."
+    root.operation = lambda x, y: x == y
+    lo = 0
+    hi = pow(10, 100)
+
+    # Figure out which way the binary search should raise/lower range
+    # based on the effect of increasing the value of the 'humn' node.
+    set_humn(root, lo)
+    left = root.left.get_value()
+    right = root.right.get_value()
+    delta0 = left - right
+
+    set_humn(root, pow(10, 10))
+    left = root.left.get_value()
+    right = root.right.get_value()
+    delta1 = left - right
+
+    should_lower_range = lambda x, y: x < y
+    should_raise_range = lambda x, y: x > y
+
+    if delta0 < delta1:
+        should_lower_range, should_raise_range = should_raise_range, should_lower_range
+
+    soln_b = math.inf
+    while lo <= hi:
+        mid = lo + ((hi - lo) // 2)
+        set_humn(root, mid)
+        left = root.left.get_value()
+        right = root.right.get_value()
+        if should_raise_range(left, right):
+            lo = mid + 1
+        elif should_lower_range(left, right):
+            hi = mid - 1
+        else:
+            soln_b = min(soln_b, mid)
+            hi = mid - 1
+
+    set_humn(root, soln_b)
+    left = root.left.get_value()
+    right = root.right.get_value()
+    assert left == right
+    return soln_b
 
 
 #
@@ -77,6 +135,12 @@ def test_solve_a():
     root = read_input('../test.txt')
     expected = 152
     assert solve_a(root) == expected
+
+
+def test_solve_b():
+    root = read_input('../test.txt')
+    expected = 301
+    assert solve_b(root) == expected
 
 
 #
@@ -91,8 +155,11 @@ def main():
     soln_a = solve_a(root)
     print(f"The solution to part A is {soln_a}.")
     assert soln_a == 309248622142100
-    pyperclip.copy(str(soln_a))
-    print(f"{soln_a} has been placed on the clipboard.")
+    soln_b = solve_b(root)
+    print(f"The solution to part B is {soln_b}.")
+    assert soln_b == 3757272361782
+    pyperclip.copy(str(soln_b))
+    print(f"{soln_b} has been placed on the clipboard.")
 
 
 if __name__ == '__main__':
