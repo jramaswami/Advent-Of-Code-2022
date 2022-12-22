@@ -24,6 +24,7 @@ def read_input(filename):
 
 
 class Grove:
+    "Grove for part A where wrapping is a torus."
 
     OFFSETS = [Posn(0, 1), Posn(1, 0), Posn(0, -1), Posn(-1, 0)]
     MARK = '>v<^'
@@ -123,8 +124,8 @@ class Grove:
             else:
                 self.turn(p)
 
-    def solve_a(self):
-        "Solve part A of puzzle."
+    def solve(self):
+        "Solve puzzle."
         self.walk()
         return (
             ((self.posn.row + 1) * 1000) +
@@ -136,9 +137,150 @@ class Grove:
         return "\n".join("".join(t) for t in self.grid)
 
 
+class CubeGrove(Grove):
+    "Grove for part B where wrapping is a cube."
+
+    def __init__(self, grid, path, facesize, facemap, wrapfn):
+        super().__init__(grid, path)
+        self.faces = [[' ' for _ in row] for row in grid]
+        self.faceoffsets = [Posn(0, 0) for _ in range(7)]
+        # self.grids = [[[' ' for _ in range(facesize)] for _ in range(facesize)] for _ in range(7)]
+        for i, facerow in enumerate(facemap):
+            for j, faceid in enumerate(facerow):
+                if faceid:
+                    top = i * facesize
+                    left = j * facesize
+                    self.faceoffsets[faceid] = Posn(top, left)
+                    for r in range(top, top+facesize):
+                        for c in range(left, left+facesize):
+                            if c >= len(self.faces[r]):
+                                break
+                            self.faces[r][c] = faceid
+                            # self.grids[faceid][r-top][c-left] = grid[r][c]
+        self.wrapfn = wrapfn
+
+    def wrap(self):
+        "Wrap using wrapping function passed in at initialization."
+        self.grid[self.posn.row][self.posn.col] = '*'
+        # Convert to face posn.
+        faceid = self.faces[self.posn.row][self.posn.col]
+        faceoff = self.faceoffsets[faceid]
+        posn = Posn(self.posn.row - faceoff.row, self.posn.col - faceoff.col)
+        faceid0, posn0, facing0 = self.wrapfn(faceid, posn, self.facing)
+        self.grid[self.posn.row][self.posn.col] = Grove.MARK[self.facing]
+        # Convert posn to actual posn
+        faceoff = self.faceoffsets[faceid0]
+        posn0 = Posn(posn0.row + faceoff.row, posn0.col + faceoff.col)
+        return posn0, facing0
+
+    def move(self, steps):
+        """
+        Move the given number of steps, unless you run into a wall.
+        Be sure to wrap around if you go out of bounds.
+        """
+        for _ in range(steps):
+            moving = Grove.OFFSETS[self.facing]
+            posn0 = Posn(self.posn.row + moving.row, self.posn.col + moving.col)
+            facing0 = self.facing
+            if not self.inbounds(posn0):
+                posn0, facing0 = self.wrap()
+            if self.grid[posn0.row][posn0.col] == '#':
+                return
+            self.posn = posn0
+            self.facing = facing0
+            self.grid[self.posn.row][self.posn.col] = Grove.MARK[self.facing]
+
+
+def wrapping_for_test_input(faceid, posn, facing):
+    "Wrapping function for test input."
+    if faceid == 2 and facing == Grove.EAST:
+        return 3, Posn(0, 4 - 1 - posn.row), Grove.SOUTH
+    if faceid == 6 and facing == Grove.SOUTH:
+        return 5, Posn(4 - 1, 4 - 1 - posn.col), Grove.NORTH
+    if faceid == 4 and facing == Grove.NORTH:
+        return 1, Posn(posn.col, 0), Grove.EAST
+    raise Exception("Cannot wrap")
+
+
+def wrapping_for_actual_input(faceid, posn, facing):
+    """
+    Wrapping function for actual input.
+    Spent quality time with a cube to write this.  :  )
+    """
+    # FACE ID == 1
+    if faceid == 1:
+        if facing == Grove.EAST:
+            return 3, Posn(posn.row, 0), Grove.EAST
+        if facing == Grove.SOUTH:
+            return 2, Posn(0, posn.col), Grove.SOUTH
+        if facing == Grove.WEST:
+            return 4, Posn(50 - 1 - posn.row, 0), Grove.EAST
+        if facing == Grove.NORTH:
+            return 5, Posn(posn.col, 0), Grove.EAST
+
+    # FACE ID == 2
+    if faceid == 2:
+        if facing == Grove.EAST:
+            return 3, Posn(50-1, posn.row), Grove.NORTH
+        if facing == Grove.SOUTH:
+            return 6, Posn(0, posn.col), Grove.SOUTH
+        if facing == Grove.WEST:
+            return 4, Posn(0, posn.row), Grove.SOUTH
+        if facing == Grove.NORTH:
+            return 1, Posn(50-1, posn.col), Grove.NORTH
+
+    # FACE ID == 3
+    if faceid == 3:
+        if facing == Grove.EAST:
+            return 6, Posn(50-1-posn.row, 50-1), Grove.WEST
+        if facing == Grove.SOUTH:
+            return 2, Posn(posn.col, 50-1), Grove.WEST
+        if facing == Grove.WEST:
+            return 1, Posn(posn.row, 50-1), Grove.WEST
+        if facing == Grove.NORTH:
+            return 5, Posn(50-1, posn.col), Grove.NORTH
+
+    # FACE ID == 4
+    if faceid == 4:
+        if facing == Grove.EAST:
+            6, Posn(posn.row, 0), Grove.EAST
+        if facing == Grove.SOUTH:
+            5, Posn(0, posn.col), Grove.SOUTH
+        if facing == Grove.WEST:
+            return 1, Posn(50-1-posn.row, 0), Grove.EAST
+        if facing == Grove.NORTH:
+            return 2, Posn(posn.col, 0), Grove.EAST
+
+    # FACE ID == 5
+    if faceid == 5:
+        if facing == Grove.EAST:
+            return 6, Posn(50-1, posn.row) ,Grove.NORTH
+        if facing == Grove.SOUTH:
+            return 3, Posn(0, posn.col), Grove.SOUTH
+        if facing == Grove.WEST:
+            return 1, Posn(0, posn.row), Grove.SOUTH
+        if facing == Grove.NORTH:
+            4, Posn(50-1, posn.col), Grove.NORTH
+
+    # FACE ID == 6
+    if faceid == 6:
+        if facing == Grove.EAST:
+            return 3, Posn(50-1-posn.row, 50-1), Grove.WEST
+        if facing == Grove.SOUTH:
+            return 5, Posn(posn.col, 50-1), Grove.WEST
+        if facing == Grove.WEST:
+            return 4, Posn(posn.row, 50-1), Grove.WEST
+        if facing == Grove.NORTH:
+            return 2, Posn(50-1, posn.col), Grove.NORTH
+
+    msg = f"Cannot wrap: {faceid=} {posn=} {facing=}"
+    raise Exception(msg)
+
+
 #
 # Testing
 #
+
 
 def test_wrap():
     grove = Grove(*(read_input('../test.txt')))
@@ -162,7 +304,14 @@ def test_wrap():
 
 def test_solve_a():
     grove = Grove(*(read_input('../test.txt')))
-    assert grove.solve_a() == 6032
+    assert grove.solve() == 6032
+
+
+def test_solve_b():
+    grid, path = read_input('../test.txt')
+    facesize, facemap = 4, [[0, 0, 1, 0], [5, 4, 2, 0], [0, 0, 6, 3]]
+    grove = CubeGrove(grid, path, facesize, facemap, wrapping_for_test_input)
+    assert grove.solve() == 5031
 
 
 #
@@ -175,11 +324,18 @@ def main():
     import pyperclip
     inp = read_input('../input22.txt')
     grove = Grove(*inp)
-    soln_a = grove.solve_a()
+    soln_a = grove.solve()
     print(f"The solution to part A is {soln_a}.")
     assert soln_a == 88226
-    pyperclip.copy(soln_a)
-    print(f"{soln_a} has been placed on the clipboard.")
+
+    grid, path = read_input('../input22.txt')
+    facesize, facemap = 50, [[0, 1, 3], [0, 2, 0], [4, 6, 0], [5, 0, 0]]
+    grove = CubeGrove(grid, path, facesize, facemap, wrapping_for_actual_input)
+    soln_b = grove.solve()
+    print(f"The solution to part B is {soln_b}.")
+    assert soln_b == 57305
+    pyperclip.copy(soln_b)
+    print(f"{soln_b} has been placed on the clipboard.")
 
 
 if __name__ == '__main__':
