@@ -21,14 +21,14 @@ OFFSETS = {
 
 
 def read_input(filename):
+    "Read grid from input file."
     with open(filename) as infile:
         return [list(line.strip()) for line in infile]
 
 
 class Grid:
 
-    def __init__(self, grid, verbose=False):
-        self.verbose = verbose
+    def __init__(self, grid):
         self.height = len(grid)
         self.width = len(grid[0])
         self.moves = collections.deque(
@@ -41,12 +41,8 @@ class Grid:
                 if val == '#':
                     self.elves.add(Posn(r, c))
 
-    def log(self, msg):
-        if self.verbose:
-            print(msg)
-
     def propose(self, posn):
-        self.log(f"propose({posn=})")
+        "Compute the proposed move for the given position."
         # Each Elf considers the eight positions adjacent to themself. If no
         # other Elves are in one of those eight positions, the Elf does not do
         # anything during this round.
@@ -57,9 +53,7 @@ class Grid:
                 neighbors[k] = p
             else:
                 neighbors[k] = None
-        self.log(f"{neighbors=}")
         if all(n is None for n in neighbors.values()):
-            self.log(f"Not moving because I have no neighbors.")
             return None
         # Otherwise, the Elf looks in each of four directions in the following
         # order and proposes moving one step in the first valid direction:
@@ -67,17 +61,15 @@ class Grid:
         # proposes moving north one step.
         # Etc.
         for ms in self.moves:
-            self.log(f"Considering {ms=}: {[neighbors[n] for n in ms]}")
             if all(neighbors[n] is None for n in ms):
                 posn0 = posn + OFFSETS[ms[0]]
-                self.log(f"That's the one! I'm moving {ms[0]} to {posn0}.")
                 return posn0
         return None
 
     def tick(self):
+        "Run one round. Return True if any moves took place."
         # During the first half of each round, each Elf ... roposes moving one
         # step in the first valid direction.
-        self.log('Making proposals ...')
         proposals = collections.defaultdict(list)
         for posn in self.elves:
             prop = self.propose(posn)
@@ -87,27 +79,23 @@ class Grid:
         # destination tile if they were the only Elf to propose moving to that
         # position. If two or more Elves propose moving to the same position,
         # none of those Elves move.
-        self.log(f"{proposals=}")
-        self.log('Making moves ...')
         elves0 = set()
+        move_made = False
         for to_posn in proposals:
             if len(proposals[to_posn]) == 1:
-                self.log(f"Moving {proposals[to_posn][0]} to {to_posn}")
                 elves0.add(to_posn)
+                move_made = True
             else:
-                self.log(f"Elves trying to move to {to_posn} collide:")
                 for from_posn in proposals[to_posn]:
-                    self.log(f"{from_posn} cannot move to {to_posn}")
                     elves0.add(from_posn)
         self.elves = elves0
         # Finally, at the end of the round, the first direction the Elves
         # considered is moved to the end of the list of directions.
-        self.log('Rotating moves ...')
-        self.log(f"{self.moves}")
         self.moves.rotate(-1)
-        self.log(f"{self.moves}")
+        return move_made
 
     def get_grid(self):
+        "Return the grid as a list of list of strings."
         grid = []
         for r in range(self.height):
             row = []
@@ -120,6 +108,7 @@ class Grid:
         return grid
 
     def solve_a(self):
+        "Solve part A of puzzle."
         for _ in range(10):
             self.tick()
 
@@ -136,6 +125,12 @@ class Grid:
         width = max_col - min_col + 1
         return (height * width) - len(self.elves)
 
+    def solve_b(self):
+        "Solve part B of puzzle."
+        t = 1
+        while self.tick():
+            t += 1
+        return t
 
     def __str__(self):
         return "\n".join("".join(row) for row in self.get_grid())
@@ -145,8 +140,9 @@ class Grid:
 # Testing
 #
 
+
 def test_propose():
-    grid = Grid(read_input('../test1.txt'), verbose=True)
+    grid = Grid(read_input('../test1.txt'))
 
     # Round 1
     elf = Posn(1, 2)
@@ -174,8 +170,6 @@ def test_propose():
     assert grid.get_grid() == expected
 
     # Round 2
-
-    print('*' * 50, 'Round 2 ...')
     elf = Posn(0, 2)
     expected = elf + OFFSETS['S']
     assert grid.propose(elf) == expected
@@ -201,9 +195,6 @@ def test_propose():
     assert grid.get_grid() == expected
 
     # Round 3
-    print('*' * 50, 'Round 3 ...')
-    print(str(grid))
-
     elf = Posn(5, 2)
     expected = None
     assert grid.propose(elf) == expected
@@ -212,6 +203,7 @@ def test_propose():
     expected = read_input('../expected1_3.txt')
     assert grid.get_grid() == expected
 
+
 def test_tick_1():
     grid = Grid(read_input('../test1.txt'))
     for t in range(1, 11):
@@ -219,15 +211,11 @@ def test_tick_1():
         expected_filename = f"../expected1_{t}.txt"
         if os.path.exists(expected_filename):
             expected = read_input(expected_filename)
-            print('Expected:')
-            print("\n".join("".join(row) for row in expected))
-            print('Actual:')
-            print(str(grid))
             assert grid.get_grid() == expected
 
 
 def test_tick_2():
-    grid = Grid(read_input('../test2.txt'), verbose=False)
+    grid = Grid(read_input('../test2.txt'))
     for t in range(1, 11):
         grid.tick()
         expected_filename = f"../expected2_{t}.txt"
@@ -237,8 +225,16 @@ def test_tick_2():
 
 
 def test_solve_a():
-    grid = Grid(read_input('../test2.txt'), verbose=False)
+    grid = Grid(read_input('../test2.txt'))
     assert grid.solve_a() == 110
+
+
+def test_solve_b():
+    grid = Grid(read_input('../test1.txt'))
+    assert grid.solve_b() == 4
+
+    grid = Grid(read_input('../test2.txt'))
+    assert grid.solve_b() == 20
 
 
 #
@@ -252,9 +248,13 @@ def main():
     grid = Grid(read_input('../input23.txt'))
     soln_a = grid.solve_a()
     print(f"The solution to part A is {soln_a}.")
-    pyperclip.copy(str(soln_a))
     assert soln_a == 4025
-    print(f"{soln_a} has been placed in the clipboard.")
+    grid = Grid(read_input('../input23.txt'))
+    soln_b = grid.solve_b()
+    print(f"The solution to part B is {soln_b}.")
+    assert soln_b == 935
+    pyperclip.copy(str(soln_b))
+    print(f"{soln_b} has been placed in the clipboard.")
 
 
 if __name__ == '__main__':
